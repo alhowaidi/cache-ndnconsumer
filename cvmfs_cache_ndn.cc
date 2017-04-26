@@ -60,7 +60,7 @@ map<uint64_t, Listing> listings;
 struct cvmcache_context *ctx;
 
 char* secondCachePath = "/var/lib/cvmfs/";
-//char* primaryCachePath = "/var/lib/cvmfs/shared/";
+char* primaryCachePath = "/var/lib/cvmfs/shared/";
 
 static std::string ndn_file_name(struct cvmcache_hash *id)
 {
@@ -82,13 +82,26 @@ static std::string ndn_file_name(struct cvmcache_hash *id)
         return ss.str();
 }
 
-static int null_chrefcnt(struct cvmcache_hash *id, int32_t change_by) {
+static int ndn_chrefcnt(struct cvmcache_hash *id, int32_t change_by) {
 
 
- printf("null chrefcnt ... \n");
+
+ printf("ndn chrefcnt ... \n");
         std::string fname = ndn_file_name(id);
         printf("The file name is : %s \n",fname.c_str());
         std::string fPathName= secondCachePath + fname;
+
+std::string fPathNameUpper = primaryCachePath + fname;
+int fd_upper = open(fPathNameUpper.c_str(),O_RDONLY);
+if(fd_upper >= 0)
+{
+close(fd_upper);
+return CVMCACHE_STATUS_OK;
+
+
+}
+close(fd_upper);
+
         int fd = open(fPathName.c_str(), O_RDONLY);
         if(fd < 0)
         {close(fd);
@@ -109,7 +122,7 @@ printf("after sending interenst \n");
                 return CVMCACHE_STATUS_NOENTRY;
         }
         struct stat64 info;
-        int val =  fstat64(fd2, &info);
+        fstat64(fd2, &info);
         int64_t size = info.st_size;
         if(size < 0)
 
@@ -130,17 +143,17 @@ return CVMCACHE_STATUS_OK;
 }
 
 
-static int null_obj_info(
+static int ndn_obj_info(
   struct cvmcache_hash *id,
   struct cvmcache_object_info *info)
 {
- printf("null obj info ... \n");
+ printf("ndn obj info ... \n");
 
         std::string fname = ndn_file_name(id);
         std::string fPathName= secondCachePath + fname;
         int fd = open(fPathName.c_str(), O_RDONLY);
         struct stat64 infoFile;
-        int val =  fstat64(fd, &infoFile);
+        fstat64(fd, &infoFile);
         uint64_t size = infoFile.st_size;
         info->size = size;
          printf("size is %" PRId64 "\n", info->size);
@@ -151,12 +164,12 @@ static int null_obj_info(
 }
 
 
-static int null_pread(struct cvmcache_hash *id,
+static int ndn_pread(struct cvmcache_hash *id,
                     uint64_t offset,
                     uint32_t *size,
                     unsigned char *buffer)
 {
-printf("null pread \n");
+printf("ndn pread \n");
 
         std::string fname = ndn_file_name(id);
         std::string fPathName= secondCachePath + fname;
@@ -168,7 +181,7 @@ printf("null pread \n");
                 close(fd);
                 return CVMCACHE_STATUS_NOENTRY;
         }
-        uint32_t  nbytes = pread(fd, buffer, *size, offset);
+        int32_t  nbytes = pread(fd, buffer, *size, offset);
 
         if(-1 == nbytes)
         {
@@ -181,157 +194,55 @@ printf("null pread \n");
 }
 
 
-static int null_start_txn(
+static int ndn_start_txn(
   struct cvmcache_hash *id,
   uint64_t txn_id,
   struct cvmcache_object_info *info)
 {
-  Object partial_object;
-  partial_object.id = *id;
-  partial_object.type = info->type;
-  partial_object.refcnt = 1;
-  if (info->description != NULL)
-    partial_object.description = string(info->description);
-  TxnInfo txn;
-  txn.id = *id;
-  txn.partial_object = partial_object;
-  transactions[txn_id] = txn;
   return CVMCACHE_STATUS_OK;
 }
 
 
-static int null_write_txn(
+static int ndn_write_txn(
   uint64_t txn_id,
   unsigned char *buffer,
   uint32_t size)
 {
-  TxnInfo txn = transactions[txn_id];
-  txn.partial_object.data += string(reinterpret_cast<char *>(buffer), size);
-  transactions[txn_id] = txn;
   return CVMCACHE_STATUS_OK;
 }
 
 
-static int null_commit_txn(uint64_t txn_id) {
-  TxnInfo txn = transactions[txn_id];
-  ComparableHash h(txn.id);
-  storage[h] = txn.partial_object;
-  transactions.erase(txn_id);
+static int ndn_commit_txn(uint64_t txn_id) {
   return CVMCACHE_STATUS_OK;
 }
 
-static int null_abort_txn(uint64_t txn_id) {
-  transactions.erase(txn_id);
+static int ndn_abort_txn(uint64_t txn_id) {
   return CVMCACHE_STATUS_OK;
 }
 
-static int null_info(struct cvmcache_info *info) {
-  info->size_bytes = uint64_t(-1);
-  info->used_bytes = info->pinned_bytes = 0;
-  for (map<ComparableHash, Object>::const_iterator i = storage.begin(),
-       i_end = storage.end(); i != i_end; ++i)
-  {
-    info->used_bytes += i->second.data.length();
-    if (i->second.refcnt > 0)
-      info->pinned_bytes += i->second.data.length();
-  }
-  info->no_shrink = 0;
+static int ndn_info(struct cvmcache_info *info) {
   return CVMCACHE_STATUS_OK;
 }
 
-static int null_shrink(uint64_t shrink_to, uint64_t *used) {
-  struct cvmcache_info info;
-  null_info(&info);
-  *used = info.used_bytes;
-  if (info.used_bytes <= shrink_to)
-    return CVMCACHE_STATUS_OK;
-
-  // Volatile objects
-  for (map<ComparableHash, Object>::iterator i = storage.begin(),
-       i_end = storage.end(); i != i_end; )
-  {
-    if ((i->second.refcnt > 0) || (i->second.type != CVMCACHE_OBJECT_VOLATILE))
-    {
-      ++i;
-      continue;
-    }
-    unsigned length = i->second.data.length();
-    map<ComparableHash, Object>::iterator delete_me = i++;
-    storage.erase(delete_me);
-    info.used_bytes -= length;
-    if (info.used_bytes <= shrink_to) {
-      *used = info.used_bytes;
+static int ndn_shrink(uint64_t shrink_to, uint64_t *used) {
       return CVMCACHE_STATUS_OK;
-    }
-  }
-  // All other objects
-  for (map<ComparableHash, Object>::iterator i = storage.begin(),
-       i_end = storage.end(); i != i_end; )
-  {
-    if (i->second.refcnt > 0) {
-      ++i;
-      continue;
-    }
-    unsigned length = i->second.data.length();
-    map<ComparableHash, Object>::iterator delete_me = i++;
-    storage.erase(delete_me);
-    info.used_bytes -= length;
-    if (info.used_bytes <= shrink_to) {
-      *used = info.used_bytes;
-      return CVMCACHE_STATUS_OK;
-    }
-  }
-
-  *used = info.used_bytes;
-  return CVMCACHE_STATUS_PARTIAL;
 }
 
-static int null_listing_begin(
+static int ndn_listing_begin(
   uint64_t lst_id,
   enum cvmcache_object_type type)
 {
-  Listing lst;
-  lst.type = type;
-  lst.elems = new vector<Object>();
-  for (map<ComparableHash, Object>::const_iterator i = storage.begin(),
-       i_end = storage.end(); i != i_end; ++i)
-  {
-    lst.elems->push_back(i->second);
-  }
-  listings[lst_id] = lst;
   return CVMCACHE_STATUS_OK;
 }
 
-static int null_listing_next(
+static int ndn_listing_next(
   int64_t listing_id,
   struct cvmcache_object_info *item)
 {
-  Listing lst = listings[listing_id];
-  do {
-    if (lst.pos >= lst.elems->size())
-      return CVMCACHE_STATUS_OUTOFBOUNDS;
-
-    vector<Object> *elems = lst.elems;
-    if ((*elems)[lst.pos].type == lst.type) {
-      item->id = (*elems)[lst.pos].id;
-      item->size = (*elems)[lst.pos].data.length();
-      item->type = (*elems)[lst.pos].type;
-      item->pinned = (*elems)[lst.pos].refcnt > 0;
-      item->description = (*elems)[lst.pos].description.empty()
-                          ? NULL
-                          : strdup((*elems)[lst.pos].description.c_str());
-      break;
-    }
-    lst.pos++;
-  } while (true);
-  lst.pos++;
-  listings[listing_id] = lst;
   return CVMCACHE_STATUS_OK;
 }
 
-static int null_listing_end(int64_t listing_id) {
-  delete listings[listing_id].elems;
-  listings.erase(listing_id);
+static int ndn_listing_end(int64_t listing_id) {
   return CVMCACHE_STATUS_OK;
 }
 
@@ -374,18 +285,18 @@ std::string secondCachePath2 = "ed/";
 
   struct cvmcache_callbacks callbacks;
   memset(&callbacks, 0, sizeof(callbacks));
-  callbacks.cvmcache_chrefcnt = null_chrefcnt;
-  callbacks.cvmcache_obj_info = null_obj_info;
-  callbacks.cvmcache_pread = null_pread;
-  callbacks.cvmcache_start_txn = null_start_txn;
-  callbacks.cvmcache_write_txn = null_write_txn;
-  callbacks.cvmcache_commit_txn = null_commit_txn;
-  callbacks.cvmcache_abort_txn = null_abort_txn;
-  callbacks.cvmcache_info = null_info;
-  callbacks.cvmcache_shrink = null_shrink;
-  callbacks.cvmcache_listing_begin = null_listing_begin;
-  callbacks.cvmcache_listing_next = null_listing_next;
-  callbacks.cvmcache_listing_end = null_listing_end;
+  callbacks.cvmcache_chrefcnt = ndn_chrefcnt;
+  callbacks.cvmcache_obj_info  = ndn_obj_info;
+  callbacks.cvmcache_pread = ndn_pread;
+  callbacks.cvmcache_start_txn = ndn_start_txn;
+  callbacks.cvmcache_write_txn = ndn_write_txn;
+  callbacks.cvmcache_commit_txn = ndn_commit_txn;
+  callbacks.cvmcache_abort_txn = ndn_abort_txn;
+  callbacks.cvmcache_info = ndn_info;
+  callbacks.cvmcache_shrink = ndn_shrink;
+  callbacks.cvmcache_listing_begin = ndn_listing_begin;
+  callbacks.cvmcache_listing_next = ndn_listing_next;
+  callbacks.cvmcache_listing_end = ndn_listing_end;
   callbacks.capabilities = CVMCACHE_CAP_ALL_V1;
 
   ctx = cvmcache_init(&callbacks);

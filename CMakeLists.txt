@@ -8,6 +8,6 @@ set(SOURCES ndncatchunks.hpp cvmfs_cache_ndn.cc consumer.hpp consumer.cpp data-f
 
 add_executable(pck ${SOURCES})
 
-target_compile_options(pck PUBLIC -O2 -g -pedantic -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -std=c++11 -pthread -pthread -DNDEBUG -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_SYS_BITYPES_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_NDN_CXX=1)
+target_compile_options(pck PUBLIC -O2 -g -pedantic -Wall -Wextra -Wno-write-strings  -Wno-unused-parameter -Wno-missing-field-initializers -std=c++11 -pthread -pthread -DNDEBUG -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_SYS_BITYPES_H=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_NDN_CXX=1)
 
 target_link_libraries(pck ${ZLIB_LIBRARIES} -Wl,-Bstatic -Wl,-Bdynamic -L/usr/local/lib -L/usr/lib/x86_64-linux-gnu -lndn-cxx  -lcryptopp -lssl -lcrypto -lsqlite3 -lrt -lpthread -lboost_system libcvmfs_cache.a crypto ${ZLIB_LIBRARIES})
