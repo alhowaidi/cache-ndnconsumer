@@ -23,38 +23,15 @@
 
 using namespace std;  // NOLINT
 
-struct Object {
-  struct cvmcache_hash id;
-  string data;
-  cvmcache_object_type type;
-  int32_t refcnt;
-  string description;
-};
 
-struct TxnInfo {
-  struct cvmcache_hash id;
-  Object partial_object;
-};
 
 struct Listing {
   Listing() : pos(0) { }
   cvmcache_object_type type;
   uint64_t pos;
-  vector<Object> *elems;
 };
 
-struct ComparableHash {
-  ComparableHash() { }
-  explicit ComparableHash(const struct cvmcache_hash &h) : hash(h) { }
-  struct cvmcache_hash hash;
-  bool operator <(const ComparableHash &other) const {
-    return cvmcache_hash_cmp(const_cast<cvmcache_hash *>(&(this->hash)),
-                             const_cast<cvmcache_hash *>(&(other.hash))) < 0;
-  }
-};
 
-map<uint64_t, TxnInfo> transactions;
-map<ComparableHash, Object> storage;
 map<uint64_t, Listing> listings;
 
 struct cvmcache_context *ctx;
